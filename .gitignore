@@ -1,0 +1,50 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environment
+venv/
+.env/
+.envrc
+.Python
+
+# VS Code settings
+.vscode/
+
+# macOS system files
+.DS_Store
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Configuration or secret files
+config/
+*.config
+*.secret
+*.key
+
+# Logs and outputs
+*.log
+*.out
+*.tmp
+
+# Datasets and large files (optional — customize!)
+data/
+*.csv
+*.tsv
+*.jsonl
+
+# Pytest
+.pytest_cache/
+
+# mypy & other tools
+.mypy_cache/
+.dmypy.json
+coverage.xml
+
+# GitHub Codespaces / Codespaces secrets
+*.code-workspace
+*.codespaces-secrets
