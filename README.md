@@ -14,9 +14,9 @@ We will evaluate whether the LSH Forest variant improves recall, latency, and r
 
 ---
 
-## Implementation Roadmap
+## Implementation Tentative Roadmap 
 
-### Stage 1 — Baseline plumbing (improve and refine as we go)
+### Stage 1 — Baseline plumbing
 
 1. **Install & import ColBERTv2 and vector DBs**  
 2. **Load the dataset & inspect schema**  
@@ -34,7 +34,7 @@ We will evaluate whether the LSH Forest variant improves recall, latency, and r
 
 ---
 
-## Theory Roadmap (improve and refine as we go)
+## Theory Tentative Roadmap
 
 ### LSH Forest ↔ MUVERA Compatibility
 
