@@ -46,6 +46,7 @@ We will evaluate whether the LSH Forest variant improves recall, latency, and r
 3. **Complexity Bound: Derive how added tree depth impacts FDE dimensionality and build time.** 
 4. **Practical Cases: Identify corpora where density‑adaptive splits may overfit or be problomatic, and cases where it is much better.**
 
+--- 
 
 ### April 20 Meeting Ideas
 
