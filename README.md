@@ -46,5 +46,16 @@ We will evaluate whether the LSH Forest variant improves recall, latency, and r
 3. **Complexity Bound: Derive how added tree depth impacts FDE dimensionality and build time.** 
 4. **Practical Cases: Identify corpora where density‑adaptive splits may overfit or be problomatic, and cases where it is much better.**
 
-## Repository structure:
+
+### April 20 Meeting Ideas
+
+1. **Derive an FDE from the LSH forest—be aware it could become very large.**
+
+2. **Identify the key parameters that control the main trade‑offs.**
+
+3. **Pre‑process each document’s vector set by merging highly similar vectors to reduce redundancy.**
+
+3. **Ignore Muvera for now and approximate Chamfer distance directly with an LSH forest: run each query through the tree and return its nearest neighbor.**
+
+4. **Measure performance as a function of the number of document vectors (m).**
 
