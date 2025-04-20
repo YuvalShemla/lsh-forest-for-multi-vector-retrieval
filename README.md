@@ -48,7 +48,7 @@ We will evaluate whether the LSH Forest variant improves recall, latency, and r
 
 --- 
 
-### April 20 Meeting Ideas
+## April 20 Meeting Ideas
 
 1. **Derive an FDE from the LSH forest—be aware it could become very large.**
 
