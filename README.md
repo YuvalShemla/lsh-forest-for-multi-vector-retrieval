@@ -60,3 +60,10 @@ We will evaluate whether the LSH Forest variant improves recall, latency, and r
 
 4. **Measure performance as a function of the number of document vectors (m).**
 
+## Usage
+
+To use the package and shared modules in the notebooks, install the local package in editable mode by running
+
+`pip install -e .`
+
+in the root directory.
