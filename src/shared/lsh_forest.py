@@ -167,15 +167,15 @@ class MultiDocLSHForest(LSHForest):
         self,
         q: np.ndarray,
         m: int = 1,
-        distance: Callable[[np.ndarray, np.ndarray], float] = None,
+        dist: Callable[[np.ndarray, np.ndarray], float] = None,
     ) -> List[List[Tuple[int, float]]]:
         """Return the m nearest ids (and distances) for each document using the synchronous two-phase
         DESCEND + SYNCHASCEND procedure.
 
         Returns a lists of m tuples grouped by document
         """
-        if distance is None:
-            distance = lambda a, b: np.count_nonzero(a != b)  # Hamming
+        if dist is None:
+            dist = lambda a, b: np.count_nonzero(a != b)  # Hamming
 
         # ---- top-down phase ----
         leaves, depths = [], []
@@ -207,7 +207,7 @@ class MultiDocLSHForest(LSHForest):
         # rank and return m best
         results = []
         for doc, doc_candidates in enumerate(candidates):
-            scored = [(i, distance(q, self.data[doc][i])) for i in doc_candidates]
+            scored = [(i, dist(q, self.data[doc][i])) for i in doc_candidates]
             scored.sort(key=lambda x: x[1])
             results.append(scored[:m])
         return results
