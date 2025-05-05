@@ -23,6 +23,14 @@ class BitSamplingLSH(LSHFamily):
         bit = random.randrange(self.dim)
         return lambda x, b=bit: int(x[b])
 
+class RandomHyperplaneLSH(LSHFamily):
+    """Dot product with random hyperplane"""
+
+    def sample(self):
+        w = np.random.normal(size=self.dim).astype(np.float32)
+        w /= np.linalg.norm(w)
+        return lambda x, w=w: 1 if np.dot(x, w) >= 0 else 0
+
 
 # 2.  Trie nodes (LSH Trees)
 class TrieNode:
@@ -199,12 +207,10 @@ class MultiDocLSHForest(LSHForest):
                 if depths[tree] != level:
                     continue
 
-                node = leaves[tree]
-
                 # Add pivots from this level to documents that still need matches
                 for doc in list(remaining):
                     need = m - len(candidates[doc])
-                    new_pivots = node.pivot_ids.get(doc, [])[:need]
+                    new_pivots = leaves[tree].pivot_ids.get(doc, [])[:need]
                     candidates[doc].update(new_pivots)
                     if len(candidates[doc]) >= m:
                         remaining.remove(doc)
@@ -213,7 +219,7 @@ class MultiDocLSHForest(LSHForest):
                     break
 
                 # move pointer one level up
-                node = node.parent if node.parent else node
+                leaves[tree] = leaves[tree].parent if leaves[tree].parent else leaves[tree]
                 depths[tree] -= 1
             level -= 1
 
