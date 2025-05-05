@@ -147,6 +147,9 @@ class MultiDocLSHForest(LSHForest):
             []
         )
         # (document, vectors, elements): the points themselves
+    
+    def num_docs(self):
+        return len(self.data)
 
     def insert(self, vec: np.ndarray, doc: int):
         if len(self.data) == doc:
@@ -185,23 +188,33 @@ class MultiDocLSHForest(LSHForest):
             depths.append(depth)
 
         # ---- bottom-up phase ----
-        candidates = np.empty(len(self.data), dtype=object)
+        remaining = {d for d in range(self.num_docs())}
+        candidates = np.empty(self.num_docs(), dtype=object)
         for doc in range(len(candidates)):
             candidates[doc] = set()
+
         level = max(depths)
-        while level >= 0:
+        while level >= 0 and remaining:
             for tree in range(self.l):
                 if depths[tree] != level:
                     continue
 
-                for doc, doc_candidates in enumerate(candidates):
-                    if len(doc_candidates) < m:
-                        doc_candidates.update(leaves[tree].pivot_ids.get(doc, []))
-                        # move pointer one level up
-                        leaves[tree] = (
-                            leaves[tree].parent if leaves[tree].parent else leaves[tree]
-                        )
-                        depths[tree] -= 1
+                node = leaves[tree]
+
+                # Add pivots from this level to documents that still need matches
+                for doc in list(remaining):
+                    need = m - len(candidates[doc])
+                    new_pivots = node.pivot_ids.get(doc, [])[:need]
+                    candidates[doc].update(new_pivots)
+                    if len(candidates[doc]) >= m:
+                        remaining.remove(doc)
+                
+                if not remaining:
+                    break
+
+                # move pointer one level up
+                node = node.parent if node.parent else node
+                depths[tree] -= 1
             level -= 1
 
         # rank and return m best
