@@ -12,6 +12,8 @@ def plot(x, y, xlabel):
     plt.show()
 
 def plot_similarity_heatmap(query_vecs, doc_vecs, title="Similarity Heatmap"):
+    query_vecs = query_vecs / np.linalg.norm(query_vecs, axis=1, keepdims=True)
+    doc_vecs = doc_vecs / np.linalg.norm(doc_vecs, axis=1, keepdims=True)
     sim_matrix = np.dot(query_vecs, doc_vecs.T)  # shape (q, m)
 
     gamma = 2  # adjust for more/less suppression
