@@ -31,23 +31,41 @@ forest = RecursiveLSHForest(
 forest.build_forest(target_vectors)
 
 
-def collect_candidates_with_parent_augmentation(root, query, max_candidates):
+def collect_candidates(root, query, max_candidates):
+    """
+    Collect candidate vectors by traversing the tree and considering parent nodes.
+    
+    Parameters:
+    -----------
+    root : Node
+        Root node of the tree
+    query : np.ndarray
+        Query vector
+    max_candidates : int
+        Maximum number of candidates to collect
+        
+    Returns:
+    --------
+    List[int]
+        List of candidate vector indices
+    """
     node = root
-    parent = None
-    # Descend to leaf, keeping track of parent
+    # Descend to leaf
     while node.left and node.right and node.hash_func:
-        parent = node
         if node.hash_func(query) == 0:
             node = node.left
         else:
             node = node.right
+    
     # Start with leaf candidates
     candidates = set(node.vector_ids)
-    # Ascend, adding parent vector_ids
+    
+    # Consider parent nodes for additional candidates
     parent = node.parent
     while parent and len(candidates) < max_candidates:
         candidates.update(parent.vector_ids)
         parent = parent.parent
+    
     return list(candidates)[:max_candidates]
 
 
@@ -89,7 +107,7 @@ def test_queries(
     ranks = []
     for i, q in enumerate(query_vectors):
         print(f"\nQuery {i+1}/{n_queries}")
-        candidates = collect_candidates_with_parent_augmentation(forest.roots[0], q, max_candidates)
+        candidates = collect_candidates(forest.roots[0], q, max_candidates)
         print(f"  Number of candidates collected: {len(candidates)}")
         print(f"  Candidate indices: {candidates}")
         if not candidates:
@@ -125,6 +143,7 @@ def test_queries(
     plt.show()
     return ranks
 
+
 def parameter_sweep(
     param_name: str,
     param_range: List[Any],
@@ -139,11 +158,12 @@ def parameter_sweep(
 ) -> None:
     """
     Sweep over a parameter and analyze how it affects the median rank of nearest neighbors.
+    Only rebuilds the tree when the parameter affects the tree structure.
     
     Parameters:
     -----------
     param_name : str
-        Name of parameter to sweep over ('max_depth', 'max_split_ratio', 'max_hash_attempts')
+        Name of parameter to sweep over ('km', 'max_split_ratio', 'max_hash_attempts', 'max_candidates')
     param_range : List[Any]
         List of values to try for the parameter
     n_targets : int
@@ -167,45 +187,60 @@ def parameter_sweep(
     results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../results/test_query'))
     os.makedirs(results_dir, exist_ok=True)
     
-    # Base parameters dictionary
-    base_params = {
-        'l': l,
-        'km': km,
-        'max_split_ratio': max_split_ratio,
-        'max_hash_attempts': max_hash_attempts,
-        'max_candidates': max_candidates
-    }
+    # Parameters that require tree rebuilding
+    tree_params = {'km', 'max_split_ratio', 'max_hash_attempts', 'l'}
+    
+    # Generate vectors once
+    np.random.seed(42)  # For reproducibility
+    target_vectors = np.random.randn(n_targets, dim).astype(np.float32)
+    query_vectors = np.random.randn(n_queries, dim).astype(np.float32)
     
     median_ranks = []
     mean_ranks = []
     
+    # Build initial forest if parameter doesn't affect tree structure
+    if param_name not in tree_params:
+        lsh_family = RandomHyperplaneLSH(dim=dim)
+        forest = RecursiveLSHForest(
+            lsh_family=lsh_family,
+            l=l,
+            km=km,
+            max_split_ratio=max_split_ratio,
+            max_hash_attempts=max_hash_attempts
+        )
+        forest.build_forest(target_vectors)
+    
     for param_value in param_range:
         print(f"\nTesting {param_name} = {param_value}")
         
-        # Generate vectors
-        np.random.seed(42)  # For reproducibility
-        target_vectors = np.random.randn(n_targets, dim).astype(np.float32)
-        query_vectors = np.random.randn(n_queries, dim).astype(np.float32)
-        
-        # Build forest with current parameter
-        lsh_family = RandomHyperplaneLSH(dim=dim)
-        forest_params = {**base_params, param_name: param_value}
-        test_forest = RecursiveLSHForest(
-            lsh_family=lsh_family,
-            l=forest_params['l'],
-            km=forest_params['km'],
-            max_split_ratio=forest_params['max_split_ratio'],
-            max_hash_attempts=forest_params['max_hash_attempts']
-        )
-        test_forest.build_forest(target_vectors)
+        # Only rebuild forest if parameter affects tree structure
+        if param_name in tree_params:
+            lsh_family = RandomHyperplaneLSH(dim=dim)
+            forest_params = {
+                'l': l,
+                'km': km,
+                'max_split_ratio': max_split_ratio,
+                'max_hash_attempts': max_hash_attempts,
+                param_name: param_value
+            }
+            forest = RecursiveLSHForest(
+                lsh_family=lsh_family,
+                l=forest_params['l'],
+                km=forest_params['km'],
+                max_split_ratio=forest_params['max_split_ratio'],
+                max_hash_attempts=forest_params['max_hash_attempts']
+            )
+            forest.build_forest(target_vectors)
         
         # Run queries
         ranks = []
         for q in query_vectors:
-            candidates = collect_candidates_with_parent_augmentation(
-                test_forest.roots[0], 
+            # Use param_value for max_candidates if that's what we're testing
+            current_max_candidates = param_value if param_name == 'max_candidates' else max_candidates
+            candidates = collect_candidates(
+                forest.roots[0], 
                 q, 
-                forest_params['max_candidates']
+                current_max_candidates
             )
             if not candidates:
                 continue
@@ -250,7 +285,7 @@ def parameter_sweep(
     plt.savefig(os.path.join(results_dir, filename), bbox_inches='tight', dpi=300)
     plt.close()
 
-# Example usage:
+
 if __name__ == "__main__":
     # Base parameters
     dim = 50
@@ -260,7 +295,7 @@ if __name__ == "__main__":
     km = 30
     max_split_ratio = 10
     max_hash_attempts = 1000
-    max_candidates = 1000
+    max_candidates = 200
     
     # Create results directory
     results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../results/test_query'))
@@ -278,16 +313,6 @@ if __name__ == "__main__":
         max_hash_attempts=max_hash_attempts
     )
     forest.build_forest(target_vectors)
-    
-    ## Test queries
-    # test_queries(
-    #     forest=forest,
-    #     target_vectors=target_vectors,
-    #     n_queries=n_queries,
-    #     dim=dim,
-    #     max_candidates=max_candidates,
-    #     save_plot=True
-    # )
     
     # Run parameter sweeps
     parameter_sweep(
