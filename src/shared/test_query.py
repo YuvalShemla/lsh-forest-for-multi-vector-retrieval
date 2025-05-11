@@ -288,15 +288,15 @@ def parameter_sweep(
 
 if __name__ == "__main__":
     # Base parameters
-    dim = 50
-    n_targets = 1000000
-    n_queries = 1000
+    dim = 3
+    n_targets = 1000
+    n_queries = 10
     l = 1
     km = 30
     max_split_ratio = 10
     max_hash_attempts = 1000
-    max_candidates = 200
-    
+    max_candidates = 700
+ 
     # Create results directory
     results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../results/test_query'))
     os.makedirs(results_dir, exist_ok=True)
@@ -314,16 +314,34 @@ if __name__ == "__main__":
     )
     forest.build_forest(target_vectors)
     
-    # Run parameter sweeps
-    parameter_sweep(
-        param_name='max_candidates',
-        param_range=[200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400, 2600, 2800, 3000, 3200, 3400, 3600, 3800, 4000],
-        n_targets=n_targets,
+
+    #     def test_queries(
+#     forest: RecursiveLSHForest,
+#     target_vectors: np.ndarray,
+#     n_queries: int = 10,
+#     dim: int = 100,
+#     max_candidates: int = 100,
+#     save_plot: bool = True
+# ) -> List[Optional[int]]:
+#     """
+
+    test_queries(
+        forest=forest,
+        target_vectors=target_vectors,
         n_queries=n_queries,
         dim=dim,
-        l=l,
-        km=km,
-        max_split_ratio=max_split_ratio,
-        max_hash_attempts=max_hash_attempts,
-        max_candidates=max_candidates
+        max_candidates=max_candidates,
     )
+    # Run parameter sweeps
+    # parameter_sweep(
+    #     param_name='max_candidates',
+    #     param_range=[200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400, 2600, 2800, 3000, 3200, 3400, 3600, 3800, 4000],
+    #     n_targets=n_targets,
+    #     n_queries=n_queries,
+    #     dim=dim,
+    #     l=l,
+    #     km=km,
+    #     max_split_ratio=max_split_ratio,
+    #     max_hash_attempts=max_hash_attempts,
+    #     max_candidates=max_candidates
+    # )

@@ -310,7 +310,7 @@ class ForestAnalyzer:
 
 def main():
     # Create analyzer with max_split_ratio=1.2
-    analyzer = ForestAnalyzer(n_vectors=10000, cluster_centers=1, dim=128, max_depth=20, max_split_ratio=2,
+    analyzer = ForestAnalyzer(n_vectors=100, cluster_centers=5, dim=128, max_depth=20, max_split_ratio=2,
                                n_trees=1, cluster_std=1, max_hash_attempts=1000)
     
     # Print summary

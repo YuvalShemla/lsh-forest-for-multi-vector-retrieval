@@ -2,7 +2,9 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 import os
-from .lsh_forest import LSHForest, MultiDocLSHForest, RandomHyperplaneLSH
+import random
+from lsh_forest import LSHForest, MultiDocLSHForest, RandomHyperplaneLSH
+from recursive_lsh_forest import RecursiveLSHForest, Node
 
 
 
@@ -106,8 +108,6 @@ def build_rec_forest(vectors, l, km, d, max_split_ratio=1.2, max_hash_attempts=1
     RecursiveLSHForest
         The built LSH forest
     """
-    from .recursive_lsh_forest import RecursiveLSHForest
-    
     lsh_family = RandomHyperplaneLSH(dim=d)
     forest = RecursiveLSHForest(
         lsh_family=lsh_family,
@@ -123,7 +123,7 @@ def build_rec_forest(vectors, l, km, d, max_split_ratio=1.2, max_hash_attempts=1
 def query_rec(forest, query, max_candidates, k=1):
     """
     Query the recursive LSH forest for k nearest neighbors.
-    Uses a level-by-level approach across all trees to collect candidates.
+    Collects max_candidates from each tree separately and then combines them.
     
     Parameters:
     -----------
@@ -132,7 +132,7 @@ def query_rec(forest, query, max_candidates, k=1):
     query : np.ndarray
         The query vector
     max_candidates : int
-        Maximum number of candidates to consider
+        Maximum number of candidates to consider from each tree
     k : int
         Number of nearest neighbors to return (default=1)
         
@@ -141,52 +141,45 @@ def query_rec(forest, query, max_candidates, k=1):
     List[int]
         List of k nearest neighbor indices
     """
-    from .recursive_lsh_forest import Node
-    import random
-    
-    # First, collect leaf nodes from all trees
     all_candidates = set()
-    current_level_nodes = []
     
-    # Get all leaf nodes from all trees
+    # Process each tree separately
     for tree_idx in range(forest.l):
+        tree_candidates = set()
+        
+        # Get leaf node for this tree
         root = forest.roots[tree_idx]
-        # Find leaf node for this tree
         node = root
         while node.left and node.right and node.hash_func:
             if node.hash_func(query) == 0:
                 node = node.left
             else:
                 node = node.right
-        current_level_nodes.append(node)
-        all_candidates.update(node.vector_ids)
-    
-    # If we need more candidates, start going up the trees level by level
-    while len(all_candidates) < max_candidates:
-        next_level_nodes = []
-        new_candidates = set()
         
-        # Get parent nodes for all current level nodes
-        for node in current_level_nodes:
-            if node.parent:
-                next_level_nodes.append(node.parent)
-                new_candidates.update(node.parent.vector_ids)
+        # Start with the leaf node's vectors
+        tree_candidates.update(node.vector_ids)
         
-        if not next_level_nodes:  # No more parents to consider
-            break
+        # If we need more candidates, go up the tree
+        while len(tree_candidates) < max_candidates and node.parent:
+            # Get parent's vectors
+            new_candidates = set(node.parent.vector_ids)
+            available_new = list(new_candidates - tree_candidates)
             
-        # Add new candidates up to max_candidates
-        remaining_slots = max_candidates - len(all_candidates)
-        available_new = list(new_candidates - all_candidates)
-        if len(new_candidates) <= remaining_slots:
-            all_candidates.update(new_candidates)
-        elif len(available_new) > 0:
-            # Randomly sample from new candidates
-            sample_size = min(remaining_slots, len(available_new))
-            sampled = random.sample(available_new, sample_size)
-            all_candidates.update(sampled)
+            if len(available_new) > 0:
+                # Add new candidates up to max_candidates
+                remaining_slots = max_candidates - len(tree_candidates)
+                if len(available_new) <= remaining_slots:
+                    tree_candidates.update(available_new)
+                else:
+                    # Randomly sample from new candidates
+                    sampled = random.sample(available_new, remaining_slots)
+                    tree_candidates.update(sampled)
+            
+            # Move up to parent
+            node = node.parent
         
-        current_level_nodes = next_level_nodes
+        # Add this tree's candidates to the overall set
+        all_candidates.update(tree_candidates)
     
     # Convert to list and compute distances
     candidates_list = list(all_candidates)
@@ -373,7 +366,7 @@ def main():
     print("\nTest Case 2: Recall test")
     forest = build_rec_forest(
         vectors=vectors,
-        l=5,  # Using middle value from l sweep
+        l=10,  # Using middle value from l sweep
         km=defaults['km'],
         d=dim,
         max_split_ratio=defaults['max_split_ratio'],
