@@ -51,41 +51,79 @@ def collect_candidates_with_parent_augmentation(root, query, max_candidates):
     return list(candidates)[:max_candidates]
 
 
-# 3. Generate random query vectors
-query_vectors = np.random.randn(n_queries, dim).astype(np.float32)
-
-# 4. For each query, traverse the tree and compute NN rank
-ranks = []
-for i, q in enumerate(query_vectors):
-    print(f"\nQuery {i+1}/{n_queries}")
-    candidates = collect_candidates_with_parent_augmentation(forest.roots[0], q, max_candidates)
-    print(f"  Number of candidates collected: {len(candidates)}")
-    print(f"  Candidate indices: {candidates}")
-    if not candidates:
-        print("  No candidates found.")
-        ranks.append(None)
-        continue
-    dists_candidates = np.linalg.norm(target_vectors[candidates] - q, axis=1)
-    best_candidate_idx_in_candidates = np.argmin(dists_candidates)
-    best_candidate_global_idx = candidates[best_candidate_idx_in_candidates]
-    print(f"  Best candidate index in candidates: {best_candidate_idx_in_candidates}")
-    print(f"  Best candidate global index: {best_candidate_global_idx}")
-    print(f"  Distance to best candidate: {dists_candidates[best_candidate_idx_in_candidates]}")
-    dists_all = np.linalg.norm(target_vectors - q, axis=1)
-    sorted_indices = np.argsort(dists_all)
-    rank = np.where(sorted_indices == best_candidate_global_idx)[0][0] + 1  # 1-based rank
-    print(f"  Rank of best candidate among all targets: {rank}")
-    ranks.append(rank)
-
-# 5. Plot histogram of ranks (excluding None)
-valid_ranks = [r for r in ranks if r is not None]
-plt.figure(figsize=(8, 6))
-plt.hist(valid_ranks, bins=range(1, max(valid_ranks)+2), color='skyblue', edgecolor='black', align='left')
-plt.xlabel('Rank of True Nearest Neighbor in Candidates')
-plt.ylabel('Number of Queries')
-plt.title('Histogram of True NN Rank in LSH Forest Candidates')
-plt.grid(True, alpha=0.3)
-plt.show()
+def test_queries(
+    forest: RecursiveLSHForest,
+    target_vectors: np.ndarray,
+    n_queries: int = 10,
+    dim: int = 100,
+    max_candidates: int = 100,
+    save_plot: bool = True
+) -> List[Optional[int]]:
+    """
+    Test the LSH forest with random query vectors and analyze the results.
+    
+    Parameters:
+    -----------
+    forest : RecursiveLSHForest
+        The LSH forest to test
+    target_vectors : np.ndarray
+        The target vectors used to build the forest
+    n_queries : int
+        Number of query vectors to test
+    dim : int
+        Dimension of the vectors
+    max_candidates : int
+        Maximum number of candidates to consider
+    save_plot : bool
+        Whether to save the histogram plot
+        
+    Returns:
+    --------
+    List[Optional[int]]
+        List of ranks for each query (None if no candidates found)
+    """
+    # Generate random query vectors
+    query_vectors = np.random.randn(n_queries, dim).astype(np.float32)
+    
+    # For each query, traverse the tree and compute NN rank
+    ranks = []
+    for i, q in enumerate(query_vectors):
+        print(f"\nQuery {i+1}/{n_queries}")
+        candidates = collect_candidates_with_parent_augmentation(forest.roots[0], q, max_candidates)
+        print(f"  Number of candidates collected: {len(candidates)}")
+        print(f"  Candidate indices: {candidates}")
+        if not candidates:
+            print("  No candidates found.")
+            ranks.append(None)
+            continue
+        dists_candidates = np.linalg.norm(target_vectors[candidates] - q, axis=1)
+        best_candidate_idx_in_candidates = np.argmin(dists_candidates)
+        best_candidate_global_idx = candidates[best_candidate_idx_in_candidates]
+        print(f"  Best candidate index in candidates: {best_candidate_idx_in_candidates}")
+        print(f"  Best candidate global index: {best_candidate_global_idx}")
+        print(f"  Distance to best candidate: {dists_candidates[best_candidate_idx_in_candidates]}")
+        dists_all = np.linalg.norm(target_vectors - q, axis=1)
+        sorted_indices = np.argsort(dists_all)
+        rank = np.where(sorted_indices == best_candidate_global_idx)[0][0] + 1  # 1-based rank
+        print(f"  Rank of best candidate among all targets: {rank}")
+        ranks.append(rank)
+    
+    # Plot histogram of ranks (excluding None)
+    valid_ranks = [r for r in ranks if r is not None]
+    plt.figure(figsize=(8, 6))
+    plt.hist(valid_ranks, bins=range(1, max(valid_ranks)+2), color='skyblue', edgecolor='black', align='left')
+    plt.xlabel('Rank of True Nearest Neighbor in Candidates')
+    plt.ylabel('Number of Queries')
+    plt.title('Histogram of True NN Rank in LSH Forest Candidates')
+    plt.grid(True, alpha=0.3)
+    
+    if save_plot:
+        results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../results/test_query'))
+        os.makedirs(results_dir, exist_ok=True)
+        plt.savefig(os.path.join(results_dir, f'rank_histogram_n{n_queries}_d{dim}.png'), bbox_inches='tight', dpi=300)
+    
+    plt.show()
+    return ranks
 
 def parameter_sweep(
     param_name: str,
@@ -216,63 +254,45 @@ def parameter_sweep(
 if __name__ == "__main__":
     # Base parameters
     dim = 50
-    n_targets = 100000
-    n_queries = 100
+    n_targets = 1000000
+    n_queries = 1000
     l = 1
-    km = 15
+    km = 30
     max_split_ratio = 10
     max_hash_attempts = 1000
-    max_candidates = 100
+    max_candidates = 1000
     
     # Create results directory
     results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../results/test_query'))
     os.makedirs(results_dir, exist_ok=True)
     
-    # Test different max_depth values
-    parameter_sweep(
-        param_name='km',
-        param_range=[4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-        n_targets=n_targets,
-        n_queries=n_queries,
-        dim=dim,
+    # Build initial forest for testing
+    np.random.seed(42)
+    target_vectors = np.random.randn(n_targets, dim).astype(np.float32)
+    lsh_family = RandomHyperplaneLSH(dim=dim)
+    forest = RecursiveLSHForest(
+        lsh_family=lsh_family,
         l=l,
         km=km,
         max_split_ratio=max_split_ratio,
-        max_hash_attempts=max_hash_attempts,
-        max_candidates=max_candidates
+        max_hash_attempts=max_hash_attempts
     )
+    forest.build_forest(target_vectors)
     
-    # Test different max_split_ratio values
-    parameter_sweep(
-        param_name='max_split_ratio',
-        param_range=[1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0],
-        n_targets=n_targets,
-        n_queries=n_queries,
-        dim=dim,
-        l=l,
-        km=km,
-        max_split_ratio=max_split_ratio,
-        max_hash_attempts=max_hash_attempts,
-        max_candidates=max_candidates
-    )
+    ## Test queries
+    # test_queries(
+    #     forest=forest,
+    #     target_vectors=target_vectors,
+    #     n_queries=n_queries,
+    #     dim=dim,
+    #     max_candidates=max_candidates,
+    #     save_plot=True
+    # )
     
-    # Test different max_hash_attempts values
-    parameter_sweep(
-        param_name='max_hash_attempts',
-        param_range=[1, 2, 3, 4, 5, 6, 7, 8],
-        n_targets=n_targets,
-        n_queries=n_queries,
-        dim=dim,
-        l=l,
-        km=km,
-        max_split_ratio=max_split_ratio,
-        max_hash_attempts=max_hash_attempts,
-        max_candidates=max_candidates
-    )
-
+    # Run parameter sweeps
     parameter_sweep(
         param_name='max_candidates',
-        param_range=[100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000],
+        param_range=[200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400, 2600, 2800, 3000, 3200, 3400, 3600, 3800, 4000],
         n_targets=n_targets,
         n_queries=n_queries,
         dim=dim,
