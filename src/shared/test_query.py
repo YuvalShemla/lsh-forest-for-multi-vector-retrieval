@@ -4,6 +4,7 @@ from recursive_lsh_forest import RecursiveLSHForest
 from lsh_forest import RandomHyperplaneLSH
 from typing import Optional, List, Callable, Dict, Any
 import statistics
+import os
 
 # Parameters
 n_targets = 1000
@@ -124,6 +125,10 @@ def parameter_sweep(
     max_candidates : int
         Maximum number of candidates to consider
     """
+    # Create results directory if it doesn't exist
+    results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../results/test_query'))
+    os.makedirs(results_dir, exist_ok=True)
+    
     # Base parameters dictionary
     base_params = {
         'l': l,
@@ -201,24 +206,32 @@ def parameter_sweep(
     
     # Adjust layout to prevent label cutoff
     plt.tight_layout()
-    plt.show()
+    
+    # Save the plot
+    filename = f'{param_name}_sweep_n{n_targets}_q{n_queries}_d{dim}.png'
+    plt.savefig(os.path.join(results_dir, filename), bbox_inches='tight', dpi=300)
+    plt.close()
 
 # Example usage:
 if __name__ == "__main__":
     # Base parameters
     dim = 50
-    n_targets = 1000
-    n_queries = 20
+    n_targets = 100000
+    n_queries = 100
     l = 1
-    km = 12
-    max_split_ratio = 2
+    km = 15
+    max_split_ratio = 10
     max_hash_attempts = 1000
-    max_candidates = 10
+    max_candidates = 100
+    
+    # Create results directory
+    results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../results/test_query'))
+    os.makedirs(results_dir, exist_ok=True)
     
     # Test different max_depth values
     parameter_sweep(
         param_name='km',
-        param_range=[4, 5, 6, 7, 8, 9, 10, 11],
+        param_range=[4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
         n_targets=n_targets,
         n_queries=n_queries,
         dim=dim,
@@ -232,7 +245,7 @@ if __name__ == "__main__":
     # Test different max_split_ratio values
     parameter_sweep(
         param_name='max_split_ratio',
-        param_range=[1.1, 1.2, 1.5, 1.8, 2.0],
+        param_range=[1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0],
         n_targets=n_targets,
         n_queries=n_queries,
         dim=dim,
@@ -246,7 +259,20 @@ if __name__ == "__main__":
     # Test different max_hash_attempts values
     parameter_sweep(
         param_name='max_hash_attempts',
-        param_range=[1, 2, 5, 10, 20, 40, 80, 160],
+        param_range=[1, 2, 3, 4, 5, 6, 7, 8],
+        n_targets=n_targets,
+        n_queries=n_queries,
+        dim=dim,
+        l=l,
+        km=km,
+        max_split_ratio=max_split_ratio,
+        max_hash_attempts=max_hash_attempts,
+        max_candidates=max_candidates
+    )
+
+    parameter_sweep(
+        param_name='max_candidates',
+        param_range=[100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000],
         n_targets=n_targets,
         n_queries=n_queries,
         dim=dim,
