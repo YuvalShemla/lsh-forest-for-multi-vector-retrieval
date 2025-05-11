@@ -207,28 +207,23 @@ class ForestAnalyzer:
         
         # Prepare data for average node size plots
         depth_sizes = defaultdict(list)
-        depth_passed = defaultdict(list)
         depth_trials = defaultdict(list)
         all_trials = []
         for depth, size in stats['node_sizes']:
             depth_sizes[depth].append(size)
         for node in nodes:
-            depth_passed[node.depth].append(len(node.passed_vectors))
             depth_trials[node.depth].append(node.trial_attempts)
             all_trials.append(node.trial_attempts)
         avg_sizes = [np.mean(depth_sizes[d]) for d in range(stats['max_depth'] + 1)]
-        avg_passed = [np.mean(depth_passed[d]) for d in range(stats['max_depth'] + 1)]
         avg_trials = [np.mean(depth_trials[d]) if depth_trials[d] else 0 for d in range(stats['max_depth'] + 1)]
         
-        # Create subplots (2x3 grid)
-        fig = plt.figure(figsize=(18, 10))
-        gs = fig.add_gridspec(2, 3, hspace=0.3, wspace=0.3)
+        # Create subplots (2x2 grid)
+        fig = plt.figure(figsize=(14, 8))
+        gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
         ax1 = fig.add_subplot(gs[0, 0])  # Leaf size distribution
         ax2 = fig.add_subplot(gs[0, 1])  # Number of nodes at each depth
-        ax3 = fig.add_subplot(gs[0, 2])  # Average node size by depth (final)
-        ax4 = fig.add_subplot(gs[1, 0])  # Average node size by depth (passed)
-        ax5 = fig.add_subplot(gs[1, 1])  # Average trial attempts by depth
-        fig.delaxes(fig.add_subplot(gs[1, 2]))  # Remove unused subplot
+        ax3 = fig.add_subplot(gs[1, 0])  # Average node size by depth
+        ax4 = fig.add_subplot(gs[1, 1])  # Average trial attempts by depth
         
         # 1. Leaf size distribution
         ax1.hist(stats['leaf_sizes'], bins=30, color='lightgreen', edgecolor='black')
@@ -246,26 +241,19 @@ class ForestAnalyzer:
         ax2.set_ylabel('Count', fontsize=10)
         ax2.grid(True, alpha=0.3)
         
-        # 3. Average node size by depth (final vectors)
+        # 3. Average node size by depth (all vectors)
         ax3.plot(range(stats['max_depth'] + 1), avg_sizes, 'o-', color='blue')
-        ax3.set_title('Average Node Size by Depth (Final Vectors)', pad=20, fontsize=12)
+        ax3.set_title('Average Node Size by Depth', pad=20, fontsize=12)
         ax3.set_xlabel('Depth', fontsize=10)
         ax3.set_ylabel('Average Number of Vectors', fontsize=10)
         ax3.grid(True, alpha=0.3)
         
-        # 4. Average node size by depth (passed vectors)
-        ax4.plot(range(stats['max_depth'] + 1), avg_passed, 's-', color='red')
-        ax4.set_title('Average Node Size by Depth (Passed Vectors)', pad=20, fontsize=12)
+        # 4. Average trial attempts by depth
+        ax4.plot(range(stats['max_depth'] + 1), avg_trials, 'd-', color='purple')
+        ax4.set_title('Average Trial Attempts by Depth', pad=20, fontsize=12)
         ax4.set_xlabel('Depth', fontsize=10)
-        ax4.set_ylabel('Average Number of Vectors', fontsize=10)
+        ax4.set_ylabel('Average Trial Attempts', fontsize=10)
         ax4.grid(True, alpha=0.3)
-        
-        # 5. Average trial attempts by depth
-        ax5.plot(range(stats['max_depth'] + 1), avg_trials, 'd-', color='purple')
-        ax5.set_title('Average Trial Attempts by Depth', pad=20, fontsize=12)
-        ax5.set_xlabel('Depth', fontsize=10)
-        ax5.set_ylabel('Average Trial Attempts', fontsize=10)
-        ax5.grid(True, alpha=0.3)
         
         plt.suptitle(f'LSH Forest Statistics (n={n_vectors})', fontsize=16, y=0.98)
         # Save the plot
@@ -308,7 +296,7 @@ class ForestAnalyzer:
             
         # Then collect passed vectors for all nodes at each depth
         for node in self.forest.nodes[tree_idx]:
-            depth_passed[node.depth].append(len(node.passed_vectors))
+            depth_passed[node.depth].append(len(node.vector_ids))
             
         print("\nPer-Level Statistics:")
         print("Depth | Nodes | Final Avg | Final Std | Passed Avg | Passed Std")

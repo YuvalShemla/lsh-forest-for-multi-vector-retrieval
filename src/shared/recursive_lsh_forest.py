@@ -6,13 +6,12 @@ import numpy as np
 class Node:
     """A binary tree node for the recursive LSH forest implementation."""
     
-    def __init__(self, depth: int, parent_id: Optional[int] = None):
+    def __init__(self, depth: int, parent: Optional['Node'] = None):
         self.left: Optional[Node] = None
         self.right: Optional[Node] = None
         self.depth = depth
-        self.parent_id = parent_id
-        self.vector_ids: List[int] = []  # IDs of vectors that ended up in this node
-        self.passed_vectors: List[int] = []  # IDs of all vectors that passed through this node
+        self.parent = parent  # direct reference to parent node
+        self.vector_ids: List[int] = []  # IDs of all vectors that passed through this node
         self.hash_func: Optional[Callable] = None  # The hash function for this node
         self.trial_attempts: int = 0  # Number of hash function attempts at this node
 
@@ -62,7 +61,7 @@ class RecursiveLSHForest:
         self.nodes = []
         
         for _ in range(self.l):
-            root = Node(0)
+            root = Node(0, parent=None)
             self.roots.append(root)
             tree_nodes = [root]  # Start with root node
             self.nodes.append(tree_nodes)
@@ -86,86 +85,53 @@ class RecursiveLSHForest:
         tree_nodes : List[Node]
             List of all nodes in the current tree
         """
-        # Record all vectors that pass through this node
-        node.passed_vectors = vector_indices.copy()
+        # Always store all vectors that pass through this node
+        node.vector_ids = vector_indices.copy()
         
         # Base cases
         if len(vector_indices) <= 1 or node.depth >= self.km:
-            node.vector_ids = vector_indices
             return
             
-        # Track the best split found so far
         best_split = None
         best_ratio = float('inf')
         node.trial_attempts = 0  # Reset for this node
-        
-        # Try to find a hash function that splits the vectors
         for _ in range(self.max_hash_attempts):
             node.trial_attempts += 1
             hash_func = self.lsh_family.sample()
             left_indices = []
             right_indices = []
-            
-            # Split vectors based on hash value
             for idx in vector_indices:
                 if hash_func(self.data[idx]) == 0:
                     left_indices.append(idx)
                 else:
                     right_indices.append(idx)
-                    
-            # If we found a valid split
             if left_indices and right_indices:
-                # Calculate the ratio between group sizes
                 ratio = max(len(left_indices), len(right_indices)) / min(len(left_indices), len(right_indices))
-                
-                # If this is the best split so far, save it
                 if ratio < best_ratio:
                     best_ratio = ratio
                     best_split = (hash_func, left_indices, right_indices)
-                    
-                # If we found a good enough split, use it immediately
                 if ratio <= self.max_split_ratio:
                     node.hash_func = hash_func
-                    
-                    # Create child nodes
-                    left_node = Node(node.depth + 1, len(tree_nodes))
-                    right_node = Node(node.depth + 1, len(tree_nodes) + 1)
-                    
-                    # Add to tree_nodes list
+                    left_node = Node(node.depth + 1, parent=node)
+                    right_node = Node(node.depth + 1, parent=node)
                     tree_nodes.extend([left_node, right_node])
-                    
-                    # Set children
                     node.left = left_node
                     node.right = right_node
-                    
-                    # Recursively build subtrees
                     self._build_tree(left_node, left_indices, tree_nodes)
                     self._build_tree(right_node, right_indices, tree_nodes)
                     return
-                    
-        # If we found any valid split, use the best one
         if best_split is not None:
             hash_func, left_indices, right_indices = best_split
             node.hash_func = hash_func
-            
-            # Create child nodes
-            left_node = Node(node.depth + 1, len(tree_nodes))
-            right_node = Node(node.depth + 1, len(tree_nodes) + 1)
-            
-            # Add to tree_nodes list
+            left_node = Node(node.depth + 1, parent=node)
+            right_node = Node(node.depth + 1, parent=node)
             tree_nodes.extend([left_node, right_node])
-            
-            # Set children
             node.left = left_node
             node.right = right_node
-            
-            # Recursively build subtrees
             self._build_tree(left_node, left_indices, tree_nodes)
             self._build_tree(right_node, right_indices, tree_nodes)
             return
-            
-        # If we couldn't find any valid split, store all vectors in this node
-        node.vector_ids = vector_indices
+        # If we couldn't find any valid split, just keep all vectors in this node
         
     def query(
         self,

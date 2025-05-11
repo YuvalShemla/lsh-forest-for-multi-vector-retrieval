@@ -1,2 +1,6 @@
 numpy
 matplotlib
+networkx
+# Note: pygraphviz requires Graphviz to be installed on your system
+# On mac: brew install graphviz
+pygraphviz
