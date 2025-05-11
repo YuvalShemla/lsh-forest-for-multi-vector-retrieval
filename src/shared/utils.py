@@ -1,9 +1,17 @@
 import numpy as np
 import time
-import os
-from beir.datasets.data_loader import GenericDataLoader
-from sentence_transformers import SentenceTransformer
+
 from shared.lsh_forest import LSHForest, MultiDocLSHForest, RandomHyperplaneLSH
+
+
+
+def timed(func, *args):
+    start = time.perf_counter()
+    output = func(*args)
+    end = time.perf_counter()
+    print(f"{func.__name__} took {end - start:.4f} sec")
+    return output
+
 
 # =======================
 # Chamfer
