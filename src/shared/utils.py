@@ -5,10 +5,11 @@ import os
 import random
 from shared.lsh_forest import LSHForest, MultiDocLSHForest, RandomHyperplaneLSH
 from shared.recursive_lsh_forest import RecursiveLSHForest, Node
-
+from tqdm import tqdm
 from beir import util
 from beir.datasets.data_loader import GenericDataLoader
 from sentence_transformers import SentenceTransformer
+from sklearn.decomposition import PCA
 
 
 
@@ -222,8 +223,7 @@ def experiment_rec(variable, values, defaults, vectors, queries, d):
     Tuple[List[float], List[float]]
         Lists of median ranks and mean ranks for each parameter value
     """
-
-    
+    print("hi")
     # Create results directory if it doesn't exist
     results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../results/test_query'))
     os.makedirs(results_dir, exist_ok=True)
@@ -239,8 +239,8 @@ def experiment_rec(variable, values, defaults, vectors, queries, d):
     max_hash_attempts = defaults.get('max_hash_attempts', 1000)
     max_candidates = defaults.get('max_candidates', 100)
     
-    # Run parameter sweep
-    for value in values:
+    # Run parameter sweep with tqdm progress bar
+    for value in tqdm(values, desc=f"Parameter Sweep: {variable}", unit="value"):
         # Update the parameter being tested
         if variable == 'l':
             l = value
@@ -263,9 +263,9 @@ def experiment_rec(variable, values, defaults, vectors, queries, d):
             max_hash_attempts=max_hash_attempts
         )
         
-        # Run queries and collect ranks
+        # Run queries and collect ranks with tqdm progress bar
         ranks = []
-        for query in queries:
+        for query in tqdm(queries, desc="Processing Queries", leave=False):
             # Get approximate nearest neighbors
             approx_nn = query_rec(forest, query, max_candidates, k=1)
             if not approx_nn:
@@ -279,7 +279,7 @@ def experiment_rec(variable, values, defaults, vectors, queries, d):
             approx_idx = approx_nn[0]
             rank = np.where(true_ranks == approx_idx)[0][0]
             ranks.append(rank)
-            
+        
         # Calculate statistics
         if ranks:
             median_ranks.append(np.median(ranks))
@@ -301,6 +301,10 @@ def experiment_rec(variable, values, defaults, vectors, queries, d):
     # Save plot
     plt.savefig(os.path.join(results_dir, f'{variable}_sweep_n{len(vectors)}_q{len(queries)}_d{d}.png'))
     plt.close()
+
+    # Save results
+    np.save(os.path.join(results_dir, "median_ranks.npy"), median_ranks)
+    np.save(os.path.join(results_dir, "mean_ranks.npy"), mean_ranks)
     
     return median_ranks, mean_ranks
 
@@ -333,9 +337,10 @@ def recall_rec(best, approximates, k=10):
 
 def load_and_prepare_beir_dataset(
     dataset: str = "hotpotqa",
-    n: int = 1000,
+    n: int = 10,
     min_m: int = 100,
     min_q: int = 15,
+    pca_dims: int = 25,
     split: str = "test",
     save_encoded: bool = True
 ):
@@ -420,6 +425,7 @@ def load_and_prepare_beir_dataset(
     else:
         query = max(queries.values(), key=len)  # Default to the longest query available
         print(f"No query met the minimum length. Using longest query: {query}")
+    q = len(query.split())
 
     # Embedding Corpus and Queries
     print("Embedding corpus and queries")
@@ -435,7 +441,10 @@ def load_and_prepare_beir_dataset(
 
     print("Encoding documents")
     d = model.get_sentence_embedding_dimension()
-    vectors = np.zeros((len(corpus), m, d), dtype=np.float32)
+    vectors = np.zeros((len(corpus), m, pca_dims), dtype=np.float32)  # Updated to pca_dims
+
+    # Initialize PCA model
+    pca = PCA(n_components=pca_dims)
 
     for i, text in enumerate(corpus_texts):
         words = text.split(' ')
@@ -454,6 +463,9 @@ def load_and_prepare_beir_dataset(
         block_embeddings = model.encode(blocks, convert_to_tensor=True)
         block_embeddings = block_embeddings.cpu().numpy()
         
+        # Apply PCA to the block embeddings
+        block_embeddings = pca.fit_transform(block_embeddings)
+
         # Populate the document vectors with the processed embeddings
         vectors[i] = block_embeddings
 
@@ -461,7 +473,10 @@ def load_and_prepare_beir_dataset(
     print("Encoding the query")
     query_words = query.split(' ')
     query_word_embeddings = model.encode(query_words, convert_to_tensor=True)
-    queries = query_word_embeddings.cpu().numpy()
+    query_word_embeddings = query_word_embeddings.cpu().numpy()
+
+    # Apply PCA to the query embeddings
+    queries = pca.transform(query_word_embeddings)
 
     # Save encoded vectors
     if save_encoded:
@@ -470,7 +485,7 @@ def load_and_prepare_beir_dataset(
 
     print(f"Data loading and encoding complete. Found {vectors.shape[0]} document vectors of shape {vectors.shape} and query vector of shape {queries.shape}.")
 
-    return vectors, queries, corpus, query, d
+    return vectors, queries, corpus, query, pca_dims, q
 
 
 def main():
