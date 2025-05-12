@@ -3,8 +3,8 @@ import time
 import matplotlib.pyplot as plt
 import os
 import random
-from lsh_forest import LSHForest, MultiDocLSHForest, RandomHyperplaneLSH
-from recursive_lsh_forest import RecursiveLSHForest, Node
+from .lsh_forest import LSHForest, MultiDocLSHForest, RandomHyperplaneLSH
+from .recursive_lsh_forest import RecursiveLSHForest, Node
 
 
 
@@ -109,18 +109,13 @@ def build_rec_forest(vectors, l, km, d, max_split_ratio=1.2, max_hash_attempts=1
         The built LSH forest
     """
     lsh_family = RandomHyperplaneLSH(dim=d)
-    forest = RecursiveLSHForest(
-        lsh_family=lsh_family,
-        l=l,
-        km=km,
-        max_split_ratio=max_split_ratio,
-        max_hash_attempts=max_hash_attempts
-    )
-    forest.build_forest(vectors)
-    return forest
+    forests = [RecursiveLSHForest(lsh_family, l, km, max_hash_attempts, max_split_ratio) for _ in range(len(vectors))]
+    for i, forest in enumerate(forests):
+        forest.build_forest(vectors[i])
+    return forests
+    
 
-
-def query_rec(forest, query, max_candidates, k=1):
+def query_rec(forest, query, max_candidates, dist, k=1):
     """
     Query the recursive LSH forest for k nearest neighbors.
     Collects max_candidates from each tree separately and then combines them.
@@ -188,7 +183,8 @@ def query_rec(forest, query, max_candidates, k=1):
         
     # Compute distances and get k nearest neighbors
     candidate_vectors = np.array([forest.data[i] for i in candidates_list])
-    dists = np.linalg.norm(candidate_vectors - query, axis=1)
+    # dists = np.linalg.norm(candidate_vectors - query, axis=1)
+    dists = [dist(candidate, query) for candidate in candidate_vectors]
     sorted_indices = np.argsort(dists)
     return [candidates_list[i] for i in sorted_indices[:k]]
 

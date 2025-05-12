@@ -2,13 +2,52 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def plot(x, y, xlabel):
+def plot(x, y, xlabel, ylabel, title):
     plt.figure()
     plt.plot(x, y, marker='o')
     plt.grid(True)
     plt.xlabel(xlabel)
-    plt.ylabel('Similarity Score')
-    plt.title(f'Convergence of LSH approximation as {xlabel} grows')
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.show()
+
+def plot_with_identity_line(x, y, xlabel, ylabel, title):
+    x = np.asarray(x)
+    y = np.asarray(y)
+
+    plt.figure()
+    plt.scatter(x, y, marker='o')
+
+    # ─── y = x identity line in red ───
+    x_line = np.linspace(min(x.min(), y.min()), max(x.max(), y.max()), 200)
+    plt.plot(x_line, x_line, color='red', linewidth=2, linestyle='--', label='y = x')
+
+    # ─── cosmetics ───
+    plt.grid(True)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+    
+def plot_with_trendline(x, y, xlabel, ylabel, title, deg: int = 1):
+    x = np.asarray(x)
+    y = np.asarray(y)
+
+    plt.figure()
+    plt.scatter(x, y, marker='o')
+
+    coeffs   = np.polyfit(x, y, deg=deg)       # least‑squares fit
+    poly     = np.poly1d(coeffs)
+    x_line   = np.linspace(x.min(), x.max(), 200)
+    plt.plot(x_line, poly(x_line), linewidth=2, linestyle='--')  # trend only
+
+    plt.grid(True)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.tight_layout()
     plt.show()
 
 def plot_similarity_heatmap(query_vecs, doc_vecs, title="Similarity Heatmap"):

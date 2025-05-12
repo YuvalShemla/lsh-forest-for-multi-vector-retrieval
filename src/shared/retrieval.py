@@ -2,23 +2,21 @@
 import numpy as np
 
 def collect_matches(forests, queries, distance, a):
-        multi = not isinstance(forests, list)
+        multi = isinstance(forests, list)
 
-        n = forests.num_docs() if multi else len(forests)
+        n = len(forests) if multi else 1
         q = len(queries)
         d = len(queries[0])
         matches = np.empty((n, q, d), dtype=np.float32)
         if multi:
-                for i, query in enumerate(queries):
-                        results = forests.query(query, a, dist=distance)
-                        for document, result in enumerate(results):
-                                idx, _ = result[0]
-                                matches[document, i] = forests.data[document][idx]
-        else:
                 for document, forest in enumerate(forests):
                         for i, query in enumerate(queries):
-                                idx = forest.query(query, a, dist=distance)[0][0]
+                                idx = forest.query(query, a, distance, k=1,)[0]
                                 matches[document, i] = forest.data[idx] 
+        else:
+                for i, query in enumerate(queries):
+                        indices = forests.query(query, a, distance, k=a)
+                        matches[0, i] = [forests.data[idx] for idx in indices]
 
         return matches
 

@@ -133,3 +133,76 @@ class RecursiveLSHForest:
             return
         # If we couldn't find any valid split, just keep all vectors in this node
         
+
+    def query(forest, query, max_candidates, dist, k=1):
+        """
+        Query the recursive LSH forest for k nearest neighbors.
+        Collects max_candidates from each tree separately and then combines them.
+        
+        Parameters:
+        -----------
+        forest : RecursiveLSHForest
+            The LSH forest to query
+        query : np.ndarray
+            The query vector
+        max_candidates : int
+            Maximum number of candidates to consider from each tree
+        k : int
+            Number of nearest neighbors to return (default=1)
+            
+        Returns:
+        --------
+        List[int]
+            List of k nearest neighbor indices
+        """
+        all_candidates = set()
+        
+        # Process each tree separately
+        for tree_idx in range(forest.l):
+            tree_candidates = set()
+            
+            # Get leaf node for this tree
+            root = forest.roots[tree_idx]
+            node = root
+            while node.left and node.right and node.hash_func:
+                if node.hash_func(query) == 0:
+                    node = node.left
+                else:
+                    node = node.right
+            
+            # Start with the leaf node's vectors
+            tree_candidates.update(node.vector_ids)
+            
+            # If we need more candidates, go up the tree
+            while len(tree_candidates) < max_candidates and node.parent:
+                # Get parent's vectors
+                new_candidates = set(node.parent.vector_ids)
+                available_new = list(new_candidates - tree_candidates)
+                
+                if len(available_new) > 0:
+                    # Add new candidates up to max_candidates
+                    remaining_slots = max_candidates - len(tree_candidates)
+                    if len(available_new) <= remaining_slots:
+                        tree_candidates.update(available_new)
+                    else:
+                        # Randomly sample from new candidates
+                        sampled = random.sample(available_new, remaining_slots)
+                        tree_candidates.update(sampled)
+                
+                # Move up to parent
+                node = node.parent
+            
+            # Add this tree's candidates to the overall set
+            all_candidates.update(tree_candidates)
+        
+        # Convert to list and compute distances
+        candidates_list = list(all_candidates)
+        if not candidates_list:
+            return []
+            
+        # Compute distances and get k nearest neighbors
+        candidate_vectors = np.array([forest.data[i] for i in candidates_list])
+        # dists = np.linalg.norm(candidate_vectors - query, axis=1)
+        dists = [dist(candidate, query) for candidate in candidate_vectors]
+        sorted_indices = np.argsort(dists)
+        return [candidates_list[i] for i in sorted_indices[:k]]
