@@ -335,6 +335,7 @@ def load_and_prepare_beir_dataset(
     dataset: str = "hotpotqa",
     n: int = 1000,
     min_m: int = 100,
+    min_q: int = 15,
     split: str = "test",
     save_encoded: bool = True
 ):
@@ -350,6 +351,8 @@ def load_and_prepare_beir_dataset(
         Number of longest documents to use.
     min_m : int
         Minimum number of words per document for the multi-vector representation.
+    min_q : int
+        Minimum number of words for the query (attempts to find the shortest query meeting this).
     split : str
         Split of the dataset to use ("test", "train", etc.).
     save_encoded : bool
@@ -396,7 +399,7 @@ def load_and_prepare_beir_dataset(
     if os.path.exists(corpus_file) and os.path.exists(query_file):
         print("Raw corpus and query data found. Loading from local files.")
         corpus = np.load(corpus_file, allow_pickle=True).item()
-        query = np.load(query_file, allow_pickle=True).item()
+        queries = np.load(query_file, allow_pickle=True).item()
     else:
         print(f"Loading raw data from {dataset.capitalize()}")
         corpus, queries, _ = GenericDataLoader(data_folder=dataset_dir).load(split=split)
@@ -404,11 +407,19 @@ def load_and_prepare_beir_dataset(
         # Sort corpus by document length (descending)
         sorted_corpus = sorted(corpus.items(), key=lambda x: len(x[1]['text'].split()), reverse=True)
         corpus = dict(sorted_corpus[:n])  # Only keep the top n longest documents
-        query = list(queries.values())[0]  # Use the first query
 
         if save_encoded:
             np.save(corpus_file, corpus)
-            np.save(query_file, query)
+            np.save(query_file, queries)
+    
+    # Selecting the shortest query meeting the minimum length (min_q)
+    query_texts = [q for q in queries.values() if len(q.split()) >= min_q]
+    if query_texts:
+        query = min(query_texts, key=len)
+        print(f"Selected shortest query with at least {min_q} words: {query}")
+    else:
+        query = max(queries.values(), key=len)  # Default to the longest query available
+        print(f"No query met the minimum length. Using longest query: {query}")
 
     # Embedding Corpus and Queries
     print("Embedding corpus and queries")
