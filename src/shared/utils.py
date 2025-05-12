@@ -416,7 +416,7 @@ def load_and_prepare_beir_dataset(
     query_texts = [q for q in queries.values() if len(q.split()) >= min_q]
     if query_texts:
         query = min(query_texts, key=len)
-        print(f"Selected query with {len(query_texts)} words: {query}")
+        print(f"Selected query with {len(query.split())} words: {query}")
     else:
         query = max(queries.values(), key=len)  # Default to the longest query available
         print(f"No query met the minimum length. Using longest query: {query}")
