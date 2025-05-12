@@ -3,8 +3,13 @@ import time
 import matplotlib.pyplot as plt
 import os
 import random
-from lsh_forest import LSHForest, MultiDocLSHForest, RandomHyperplaneLSH
-from recursive_lsh_forest import RecursiveLSHForest, Node
+from shared.lsh_forest import LSHForest, MultiDocLSHForest, RandomHyperplaneLSH
+from shared.recursive_lsh_forest import RecursiveLSHForest, Node
+from tqdm import tqdm
+from beir import util
+from beir.datasets.data_loader import GenericDataLoader
+from sentence_transformers import SentenceTransformer
+from sklearn.decomposition import PCA
 
 
 
@@ -218,8 +223,7 @@ def experiment_rec(variable, values, defaults, vectors, queries, d):
     Tuple[List[float], List[float]]
         Lists of median ranks and mean ranks for each parameter value
     """
-
-    
+    print("hi")
     # Create results directory if it doesn't exist
     results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../results/test_query'))
     os.makedirs(results_dir, exist_ok=True)
@@ -235,8 +239,8 @@ def experiment_rec(variable, values, defaults, vectors, queries, d):
     max_hash_attempts = defaults.get('max_hash_attempts', 1000)
     max_candidates = defaults.get('max_candidates', 100)
     
-    # Run parameter sweep
-    for value in values:
+    # Run parameter sweep with tqdm progress bar
+    for value in tqdm(values, desc=f"Parameter Sweep: {variable}", unit="value"):
         # Update the parameter being tested
         if variable == 'l':
             l = value
@@ -259,9 +263,9 @@ def experiment_rec(variable, values, defaults, vectors, queries, d):
             max_hash_attempts=max_hash_attempts
         )
         
-        # Run queries and collect ranks
+        # Run queries and collect ranks with tqdm progress bar
         ranks = []
-        for query in queries:
+        for query in tqdm(queries, desc="Processing Queries", leave=False):
             # Get approximate nearest neighbors
             approx_nn = query_rec(forest, query, max_candidates, k=1)
             if not approx_nn:
@@ -275,7 +279,7 @@ def experiment_rec(variable, values, defaults, vectors, queries, d):
             approx_idx = approx_nn[0]
             rank = np.where(true_ranks == approx_idx)[0][0]
             ranks.append(rank)
-            
+        
         # Calculate statistics
         if ranks:
             median_ranks.append(np.median(ranks))
@@ -297,6 +301,10 @@ def experiment_rec(variable, values, defaults, vectors, queries, d):
     # Save plot
     plt.savefig(os.path.join(results_dir, f'{variable}_sweep_n{len(vectors)}_q{len(queries)}_d{d}.png'))
     plt.close()
+
+    # Save results
+    np.save(os.path.join(results_dir, "median_ranks.npy"), median_ranks)
+    np.save(os.path.join(results_dir, "mean_ranks.npy"), mean_ranks)
     
     return median_ranks, mean_ranks
 
@@ -325,6 +333,160 @@ def recall_rec(best, approximates, k=10):
     
     # Calculate recall
     return len(true_set & predicted_set) / k
+
+
+def load_and_prepare_beir_dataset(
+    dataset: str = "hotpotqa",
+    n: int = 10,
+    min_m: int = 100,
+    min_q: int = 15,
+    pca_dims: int = 25,
+    split: str = "test",
+    save_encoded: bool = True
+):
+    """
+    Load and prepare a BEIR dataset, selecting the top n longest documents,
+    embedding them into multi-vector representations, and saving the vectors.
+
+    Parameters:
+    -----------
+    dataset : str
+        Name of the BEIR dataset (e.g., "msmarco", "hotpotqa").
+    n : int
+        Number of longest documents to use.
+    min_m : int
+        Minimum number of words per document for the multi-vector representation.
+    min_q : int
+        Minimum number of words for the query (attempts to find the shortest query meeting this).
+    split : str
+        Split of the dataset to use ("test", "train", etc.).
+    save_encoded : bool
+        Whether to save the encoded vectors to disk.
+
+    Returns:
+    --------
+    Tuple[np.ndarray, np.ndarray, dict, str]
+        Encoded document vectors, query vectors, corpus dictionary, and query text.
+    """
+    # Model selection based on dataset
+    model_mapping = {
+        "msmarco": 'msmarco-distilbert-base-v4',
+        "hotpotqa": 'sentence-transformers/multi-qa-mpnet-base-dot-v1',
+        "nq": 'sentence-transformers/multi-qa-mpnet-base-dot-v1',
+        "scidocs": 'sentence-transformers/all-mpnet-base-v2',
+        "arguana": 'sentence-transformers/all-mpnet-base-v2',
+        "quora": 'sentence-transformers/all-mpnet-base-v2'
+    }
+    
+    model_name = model_mapping.get(dataset.lower(), 'msmarco-distilbert-base-v4')
+    print(f"Using model: {model_name} for dataset: {dataset}")
+
+    # Set the dataset path
+    dataset_dir = f"../{dataset}"
+    corpus_file = f"{dataset_dir}/corpus.npy"
+    query_file = f"{dataset_dir}/query.npy"
+    vectors_file = f"{dataset_dir}/corpus_vectors.npy"
+    query_vectors_file = f"{dataset_dir}/query_vectors.npy"
+
+    # Load + download BEIR dataset
+    if not os.path.exists(f'{dataset_dir}/corpus.jsonl'):
+        print(f"{dataset.capitalize()} dataset not found. Downloading...")
+        url = f"https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{dataset}.zip"
+        util.download_and_unzip(url, "../")
+
+        zip_path = f"{dataset_dir}/{dataset}.zip"
+        if os.path.exists(zip_path):
+            os.remove(zip_path)
+            print("Zip file deleted.")
+
+    # Loading Corpus and Queries
+    print("Looking for raw corpus and query data.")
+    if os.path.exists(corpus_file) and os.path.exists(query_file):
+        print("Raw corpus and query data found. Loading from local files.")
+        corpus = np.load(corpus_file, allow_pickle=True).item()
+        queries = np.load(query_file, allow_pickle=True).item()
+    else:
+        print(f"Loading raw data from {dataset.capitalize()}")
+        corpus, queries, _ = GenericDataLoader(data_folder=dataset_dir).load(split=split)
+
+        # Sort corpus by document length (descending)
+        sorted_corpus = sorted(corpus.items(), key=lambda x: len(x[1]['text'].split()), reverse=True)
+        corpus = dict(sorted_corpus[:n])  # Only keep the top n longest documents
+
+        if save_encoded:
+            np.save(corpus_file, corpus)
+            np.save(query_file, queries)
+    
+    # Selecting the shortest query meeting the minimum length (min_q)
+    query_texts = [q for q in queries.values() if len(q.split()) >= min_q]
+    if query_texts:
+        query = min(query_texts, key=len)
+        print(f"Selected query with {len(query.split())} words: {query}")
+    else:
+        query = max(queries.values(), key=len)  # Default to the longest query available
+        print(f"No query met the minimum length. Using longest query: {query}")
+    q = len(query.split())
+
+    # Embedding Corpus and Queries
+    print("Embedding corpus and queries")
+    model = SentenceTransformer(model_name)
+
+    print("Converting corpus into list of text")
+    corpus_texts = [doc['text'] for doc in corpus.values()]
+
+    # Determine the minimum number of words in the selected long documents
+    min_corpus_words = min(len(text.split()) for text in corpus_texts)
+    m = max(min_corpus_words, min_m)
+    print(f"Setting vectors per document (m) to {m}")
+
+    print("Encoding documents")
+    d = model.get_sentence_embedding_dimension()
+    vectors = np.zeros((len(corpus), m, pca_dims), dtype=np.float32)  # Updated to pca_dims
+
+    # Initialize PCA model
+    pca = PCA(n_components=pca_dims)
+
+    for i, text in enumerate(corpus_texts):
+        words = text.split(' ')
+        total_words = len(words)
+        block_size = total_words // m
+        remainder = total_words % m
+
+        blocks = []
+        start = 0
+        for j in range(m):
+            end = start + block_size + (1 if j < remainder else 0)
+            blocks.append(" ".join(words[start:end]))
+            start = end
+
+        # Generate embeddings for each block
+        block_embeddings = model.encode(blocks, convert_to_tensor=True)
+        block_embeddings = block_embeddings.cpu().numpy()
+        
+        # Apply PCA to the block embeddings
+        block_embeddings = pca.fit_transform(block_embeddings)
+
+        # Populate the document vectors with the processed embeddings
+        vectors[i] = block_embeddings
+
+    # Encoding the Query (Single Query)
+    print("Encoding the query")
+    query_words = query.split(' ')
+    query_word_embeddings = model.encode(query_words, convert_to_tensor=True)
+    query_word_embeddings = query_word_embeddings.cpu().numpy()
+
+    # Apply PCA to the query embeddings
+    queries = pca.transform(query_word_embeddings)
+
+    # Save encoded vectors
+    if save_encoded:
+        np.save(vectors_file, vectors)
+        np.save(query_vectors_file, queries)
+
+    print(f"Data loading and encoding complete. Found {vectors.shape[0]} document vectors of shape {vectors.shape} and query vector of shape {queries.shape}.")
+
+    return vectors, queries, corpus, query, pca_dims, q
+
 
 def main():
     """

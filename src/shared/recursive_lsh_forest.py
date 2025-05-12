@@ -42,8 +42,8 @@ class RecursiveLSHForest:
         lsh_family: "LSHFamily", 
         l: int = 10, 
         km: int = 64,
-        max_hash_attempts: int = 1000,
-        max_split_ratio: float = 2.0
+        max_hash_attempts: int = 10,
+        max_split_ratio: float = 5.0
     ):
         self.lsh_family = lsh_family
         self.l = l
