@@ -423,7 +423,9 @@ def load_and_prepare_beir_dataset(
     print(f"Setting vectors per document (m) to {m}")
 
     print("Encoding documents")
-    vectors = np.zeros((len(corpus), m, model.get_sentence_embedding_dimension()), dtype=np.float32)
+    d = model.get_sentence_embedding_dimension()
+    print(d)
+    vectors = np.zeros((len(corpus), m, d), dtype=np.float32)
 
     for i, text in enumerate(corpus_texts):
         words = text.split(' ')
@@ -458,7 +460,7 @@ def load_and_prepare_beir_dataset(
 
     print(f"Data loading and encoding complete. Found {vectors.shape[0]} document vectors of shape {vectors.shape} and query vector of shape {queries.shape}.")
 
-    return vectors, queries, corpus, query
+    return vectors, queries, corpus, query, d
 
 
 def main():
