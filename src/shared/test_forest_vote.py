@@ -27,6 +27,19 @@ class TestConfig:
     max_hash_attempts: int = 1000
     max_split_ratio: float = 2.0
     results_dir: str = "results"
+    # ScorerConfig parameters
+    gamma: float = 0.3
+    depth_scheme: DepthWeightScheme = DepthWeightScheme.LINEAR
+    popularity: bool = True
+    beta: float = 0.7
+    lin_clip: bool = True
+    skip_root: bool = True
+    weight_floor: float = 1e-6
+
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
 
 
 def generate_document_vectors(
@@ -287,8 +300,36 @@ def calculate_metrics(score_df: pd.DataFrame, true_doc_id: int) -> Dict:
 
 def main():
     """Main function to run the test."""
-    # Load configuration
-    config = TestConfig()
+    # Load configuration with custom values
+    config = TestConfig(
+        n_docs=1000,
+        vectors_per_doc=20,
+        vector_dim=10,
+        noise_std=0.02,
+        n_trees=10,
+        max_depth=15,
+        max_hash_attempts=100,
+        max_split_ratio=2.5,
+        results_dir="test_results",
+        gamma=0.4,
+        depth_scheme=DepthWeightScheme.LINEAR,
+        popularity=True,
+        beta=0.8,
+        lin_clip=False,
+        skip_root=True,
+        weight_floor=1e-5 # stop early if nodes don't contribute to score
+    )
+
+    # Create scorer config from test config
+    scorer_config = ScorerConfig(
+        depth_scheme=config.depth_scheme,
+        gamma=config.gamma,
+        lin_clip=config.lin_clip,
+        popularity=config.popularity,
+        beta=config.beta,
+        skip_root=config.skip_root,
+        weight_floor=config.weight_floor
+    )
     
     # Generate data
     print("Generating data...")
@@ -303,7 +344,7 @@ def main():
     print("Generating query...")
     query_vectors = generate_query_document(
         vector_dim=config.vector_dim,
-        n_vectors=10,
+        n_vectors=config.vectors_per_doc,
         noise_std=config.noise_std
     )
     
@@ -321,12 +362,6 @@ def main():
     
     # Run analysis
     print("Running analysis...")
-    scorer_config = ScorerConfig(
-        depth_scheme=DepthWeightScheme.LINEAR,
-        gamma=0.3, 
-        popularity=True,
-        beta=0.7
-    )
     
     # Find true document ID
     _, _, true_doc_id = calculate_ground_truth(vectors, doc_ids, query_vectors)
