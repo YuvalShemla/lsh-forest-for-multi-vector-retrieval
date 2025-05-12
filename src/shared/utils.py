@@ -416,7 +416,7 @@ def load_and_prepare_beir_dataset(
     query_texts = [q for q in queries.values() if len(q.split()) >= min_q]
     if query_texts:
         query = min(query_texts, key=len)
-        print(f"Selected shortest query with at least {min_q} words: {query}")
+        print(f"Selected query with {len(query_texts)} words: {query}")
     else:
         query = max(queries.values(), key=len)  # Default to the longest query available
         print(f"No query met the minimum length. Using longest query: {query}")
@@ -435,7 +435,6 @@ def load_and_prepare_beir_dataset(
 
     print("Encoding documents")
     d = model.get_sentence_embedding_dimension()
-    print(d)
     vectors = np.zeros((len(corpus), m, d), dtype=np.float32)
 
     for i, text in enumerate(corpus_texts):
