@@ -258,21 +258,48 @@ def create_analysis_plots(score_df: pd.DataFrame, config: ScorerConfig, results_
 
 def create_chamfer_plot(score_df: pd.DataFrame, config: ScorerConfig, results_dir: str) -> None:
     """Create and save the Chamfer distance plot."""
-    # Calculate correlations
-    score_df['log_score'] = np.log1p(score_df['score'])
-    score_chamfer_corr = score_df['log_score'].corr(score_df['chamfer'])
+    # Calculate correlations using raw scores
+    score_chamfer_corr = score_df['score'].corr(score_df['chamfer'])
     score_similarity_corr = score_df['score'].corr(score_df['true_similarity'])
     
-    plt.figure(figsize=(10, 6))
-    sns.scatterplot(data=score_df, x='chamfer', y='log_score', label=f'Points (n={len(score_df)})')
-    sns.regplot(data=score_df, x='chamfer', y='log_score', scatter=False, color='red', 
+    # Create figure with two subplots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    
+    # Plot 1: Raw scores vs Chamfer
+    sns.scatterplot(data=score_df, x='chamfer', y='score', ax=ax1, label=f'Points (n={len(score_df)})')
+    sns.regplot(data=score_df, x='chamfer', y='score', scatter=False, color='red', ax=ax1,
                 label=f'Best-fit line (r={score_chamfer_corr:.4f})')
-    plt.title(f'Chamfer Distance vs Log(Forest Score)\n'
-              f'gamma={config.gamma}, depth_scheme={config.depth_scheme.value}\n'
-              f'Score-Similarity Corr: {score_similarity_corr:.4f}')
-    plt.xlabel('Chamfer Distance')
-    plt.ylabel('Log(Forest Score)')
-    plt.legend()
+    ax1.set_title('Raw Scores vs Chamfer Distance')
+    ax1.set_xlabel('Chamfer Distance')
+    ax1.set_ylabel('Raw Score')
+    ax1.legend()
+    
+    # Plot 2: Log scores vs Chamfer
+    score_df['log_score'] = np.log1p(score_df['score'])
+    log_score_chamfer_corr = score_df['log_score'].corr(score_df['chamfer'])
+    
+    sns.scatterplot(data=score_df, x='chamfer', y='log_score', ax=ax2, label=f'Points (n={len(score_df)})')
+    sns.regplot(data=score_df, x='chamfer', y='log_score', scatter=False, color='red', ax=ax2,
+                label=f'Best-fit line (r={log_score_chamfer_corr:.4f})')
+    ax2.set_title('Log Scores vs Chamfer Distance')
+    ax2.set_xlabel('Chamfer Distance')
+    ax2.set_ylabel('Log(Score + 1)')
+    ax2.legend()
+    
+    # Add explanation of correlation difference
+    correlation_explanation = (
+        "Note: The correlation coefficient (r) shown is Pearson's correlation, "
+        "while the best-fit line uses linear regression. They may differ because:\n"
+        "1. Pearson's correlation measures linear relationship strength\n"
+        "2. The best-fit line minimizes squared errors\n"
+        "3. Outliers can affect them differently"
+    )
+    
+    plt.suptitle(f'Score Analysis (Vectors per Doc: {config.vectors_per_doc})\n'
+                 f'gamma={config.gamma}, depth_scheme={config.depth_scheme.value}\n'
+                 f'Raw Score-Similarity Corr: {score_similarity_corr:.4f}\n'
+                 f'{correlation_explanation}')
+    plt.tight_layout()
     
     chamfer_plot_filename = f"chamfer_vs_score_g{config.gamma}_d{config.depth_scheme.value}_p{int(config.popularity)}_b{config.beta}.png"
     plt.savefig(os.path.join(results_dir, chamfer_plot_filename))
@@ -298,97 +325,208 @@ def calculate_metrics(score_df: pd.DataFrame, true_doc_id: int) -> Dict:
     return metrics
 
 
+def run_experiments(base_config: TestConfig) -> None:
+    """
+    Run experiments with different parameter combinations.
+    
+    Args:
+        base_config: Base configuration to use for all experiments
+    """
+    # Parameter ranges to sweep
+    depth_schemes = [
+        DepthWeightScheme.LINEAR,
+        DepthWeightScheme.LOGISTIC,
+        DepthWeightScheme.EXPONENTIAL
+    ]
+    gamma_values = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
+    beta_values = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    popularity_values = [True, False]
+    max_depth_values = [10, 12, 15, 18, 20]
+    
+    # Create results directory for experiments
+    experiments_dir = os.path.join(base_config.results_dir, "experiments")
+    os.makedirs(experiments_dir, exist_ok=True)
+    
+    # Generate data once for all experiments
+    print("Generating data for all experiments...")
+    vectors, doc_ids = generate_document_vectors(
+        n_docs=base_config.n_docs,
+        vectors_per_doc=base_config.vectors_per_doc,
+        vector_dim=base_config.vector_dim,
+        noise_std=base_config.noise_std
+    )
+    
+    # Generate query once for all experiments
+    print("Generating query for all experiments...")
+    query_vectors = generate_query_document(
+        vector_dim=base_config.vector_dim,
+        n_vectors=base_config.vectors_per_doc,
+        noise_std=base_config.noise_std
+    )
+    
+    # Calculate ground truth once
+    _, _, true_doc_id = calculate_ground_truth(vectors, doc_ids, query_vectors)
+    
+    # Create LSH family once
+    lsh_family = LSHFamily(base_config.vector_dim)
+    
+    # Track experiment results
+    experiment_results = []
+    
+    # Run experiments
+    total_experiments = (len(depth_schemes) * len(gamma_values) * len(beta_values) * 
+                        len(popularity_values) * len(max_depth_values))
+    experiment_count = 0
+    
+    for depth_scheme in depth_schemes:
+        for gamma in gamma_values:
+            for beta in beta_values:
+                for popularity in popularity_values:
+                    for max_depth in max_depth_values:
+                        experiment_count += 1
+                        print(f"\nRunning experiment {experiment_count}/{total_experiments}")
+                        print(f"Parameters: depth_scheme={depth_scheme.value}, gamma={gamma}, "
+                              f"beta={beta}, popularity={popularity}, max_depth={max_depth}")
+                        
+                        # Create experiment-specific config
+                        exp_config = TestConfig(
+                            **{k: v for k, v in base_config.__dict__.items() 
+                               if k not in ['depth_scheme', 'gamma', 'beta', 'popularity', 'max_depth']},
+                            depth_scheme=depth_scheme,
+                            gamma=gamma,
+                            beta=beta,
+                            popularity=popularity,
+                            max_depth=max_depth,
+                            results_dir=experiments_dir
+                        )
+                        
+                        # Create scorer config
+                        scorer_config = ScorerConfig(
+                            depth_scheme=depth_scheme,
+                            gamma=gamma,
+                            beta=beta,
+                            popularity=popularity,
+                            lin_clip=base_config.lin_clip,
+                            skip_root=base_config.skip_root,
+                            weight_floor=base_config.weight_floor
+                        )
+                        
+                        # Create and build forest
+                        forest = ForestVote(
+                            lsh_family=lsh_family,
+                            l=base_config.n_trees,
+                            km=max_depth,
+                            max_hash_attempts=base_config.max_hash_attempts,
+                            max_split_ratio=base_config.max_split_ratio
+                        )
+                        forest.build_forest(vectors, doc_ids)
+                        
+                        # Query forest
+                        scores = forest.query(query_vectors, scorer_config)
+                        
+                        # Analyze results
+                        metrics = analyze_results(
+                            true_doc_id, 
+                            scores, 
+                            vectors, 
+                            doc_ids, 
+                            query_vectors, 
+                            scorer_config, 
+                            results_dir=experiments_dir
+                        )
+                        
+                        # Store experiment results
+                        experiment_results.append({
+                            'depth_scheme': depth_scheme.value,
+                            'gamma': gamma,
+                            'beta': beta,
+                            'popularity': popularity,
+                            'max_depth': max_depth,
+                            'true_doc_rank': metrics['true_doc_rank'],
+                            'true_doc_score': metrics['true_doc_score'],
+                            'score_correlation': metrics['score_correlation'],
+                            'top_1_accuracy': metrics['top_k_accuracy'][1],
+                            'top_3_accuracy': metrics['top_k_accuracy'][3],
+                            'top_5_accuracy': metrics['top_k_accuracy'][5]
+                        })
+    
+    # Save all experiment results to CSV
+    results_df = pd.DataFrame(experiment_results)
+    results_df.to_csv(os.path.join(experiments_dir, 'all_experiment_results.csv'), index=False)
+    
+    # Create summary plots
+    create_experiment_summary_plots(results_df, experiments_dir)
+    
+    print("\nAll experiments completed!")
+    print(f"Results saved in: {experiments_dir}")
+
+
+def create_experiment_summary_plots(results_df: pd.DataFrame, results_dir: str) -> None:
+    """Create summary plots for all experiments."""
+    plt.figure(figsize=(15, 10))
+    
+    # 1. Top-1 Accuracy by Depth Scheme and Popularity
+    plt.subplot(2, 2, 1)
+    sns.boxplot(data=results_df, x='depth_scheme', y='top_1_accuracy', hue='popularity')
+    plt.title('Top-1 Accuracy by Depth Scheme and Popularity')
+    plt.xticks(rotation=45)
+    
+    # 2. Score Correlation by Gamma and Beta
+    plt.subplot(2, 2, 2)
+    pivot_corr = results_df.pivot_table(
+        values='score_correlation',
+        index='gamma',
+        columns='beta',
+        aggfunc='mean'
+    )
+    sns.heatmap(pivot_corr, annot=True, cmap='YlOrRd')
+    plt.title('Average Score Correlation by Gamma and Beta')
+    
+    # 3. True Document Rank by Max Depth
+    plt.subplot(2, 2, 3)
+    sns.boxplot(data=results_df, x='max_depth', y='true_doc_rank')
+    plt.title('True Document Rank by Max Depth')
+    
+    # 4. Top-k Accuracy Distribution
+    plt.subplot(2, 2, 4)
+    accuracy_data = pd.melt(
+        results_df,
+        value_vars=['top_1_accuracy', 'top_3_accuracy', 'top_5_accuracy'],
+        var_name='k',
+        value_name='accuracy'
+    )
+    sns.boxplot(data=accuracy_data, x='k', y='accuracy')
+    plt.title('Top-k Accuracy Distribution')
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(results_dir, 'experiment_summary.png'))
+    plt.close()
+
+
 def main():
     """Main function to run the test."""
     # Load configuration with custom values
     config = TestConfig(
         n_docs=1000,
-        vectors_per_doc=20,
-        vector_dim=10,
+        vectors_per_doc=50,
+        vector_dim=5,
         noise_std=0.02,
         n_trees=10,
         max_depth=15,
         max_hash_attempts=100,
         max_split_ratio=2.5,
         results_dir="test_results",
-        gamma=0.4,
+        gamma=0.3,
         depth_scheme=DepthWeightScheme.LINEAR,
         popularity=True,
         beta=0.8,
         lin_clip=False,
         skip_root=True,
-        weight_floor=1e-5 # stop early if nodes don't contribute to score
-    )
-
-    # Create scorer config from test config
-    scorer_config = ScorerConfig(
-        depth_scheme=config.depth_scheme,
-        gamma=config.gamma,
-        lin_clip=config.lin_clip,
-        popularity=config.popularity,
-        beta=config.beta,
-        skip_root=config.skip_root,
-        weight_floor=config.weight_floor
+        weight_floor=1e-5
     )
     
-    # Generate data
-    print("Generating data...")
-    vectors, doc_ids = generate_document_vectors(
-        n_docs=config.n_docs,
-        vectors_per_doc=config.vectors_per_doc,
-        vector_dim=config.vector_dim,
-        noise_std=config.noise_std
-    )
-    
-    # Generate query
-    print("Generating query...")
-    query_vectors = generate_query_document(
-        vector_dim=config.vector_dim,
-        n_vectors=config.vectors_per_doc,
-        noise_std=config.noise_std
-    )
-    
-    # Create and build forest
-    print("Building forest...")
-    lsh_family = LSHFamily(config.vector_dim)
-    forest = ForestVote(
-        lsh_family=lsh_family,
-        l=config.n_trees,
-        km=config.max_depth,
-        max_hash_attempts=config.max_hash_attempts,
-        max_split_ratio=config.max_split_ratio
-    )
-    forest.build_forest(vectors, doc_ids)
-    
-    # Run analysis
-    print("Running analysis...")
-    
-    # Find true document ID
-    _, _, true_doc_id = calculate_ground_truth(vectors, doc_ids, query_vectors)
-    
-    # Query forest
-    scores = forest.query(query_vectors, scorer_config)
-    
-    # Analyze results
-    metrics = analyze_results(
-        true_doc_id, 
-        scores, 
-        vectors, 
-        doc_ids, 
-        query_vectors, 
-        scorer_config, 
-        results_dir=config.results_dir
-    )
-    
-    # Print metrics
-    print("\nResults:")
-    print(f"True document ID: {true_doc_id}")
-    print(f"True document rank: {metrics['true_doc_rank']}")
-    print(f"True document score: {metrics['true_doc_score']:.4f}")
-    print(f"Score correlation with true similarity: {metrics['score_correlation']:.4f}")
-    print("\nTop-k accuracy:")
-    for k, is_correct in metrics['top_k_accuracy'].items():
-        print(f"Top-{k}: {'✓' if is_correct else '✗'}")
+    # Run experiments
+    run_experiments(config)
 
 
 if __name__ == "__main__":
