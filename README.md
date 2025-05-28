@@ -8,13 +8,13 @@ Our core result is a depth-weighted scoring algorithm that leverages the probabi
 
 ![Forest Ensemble Architecture](figures/forest_ensemble.png)
 
-Our implementation achieves logarithmic complexity O(log n) in the number of vector sets while maintaining high recall and strong correlation with exact chamfer distance. This is accomplished through an ensemble of LSH trees that work together to efficiently partition and search the vector space.
+Traditional chamfer distance computation requires comparing each query vector against every vector in every document, resulting in O(n²qd) complexity. While LSH forests reduce this to O(nq) by creating a separate forest for each document, our depth-weighted algorithm eliminates the linear dependence on the number of documents entirely, achieving O(q log n) complexity where q is the number of query vectors and n is the total number of vectors across all documents.
 
 ## Motivation
 
 Traditional chamfer distance computation between sets of vectors has a quadratic complexity O(n²qd), making it computationally expensive for large-scale applications. Our recursive LSH forest implementation addresses this challenge by:
 
-1. Providing an efficient approximation of chamfer distance with O(log n) complexity
+1. Providing an efficient approximation of chamfer distance with O(q log n) complexity
 2. Reducing computational complexity through hierarchical partitioning
 3. Supporting both single-document and multi-document retrieval
 4. Maintaining accuracy through configurable parameters
@@ -25,20 +25,28 @@ Traditional chamfer distance computation between sets of vectors has a quadratic
 The implementation offers three main approaches with different complexity characteristics:
 
 ### Direct Chamfer Distance
-- Extremely fast in practice
-- O(n²qd) complexity
+- Requires comparing each query vector against every vector in every document
+- O(n²qd) complexity, where:
+  - n is the number of vectors per document
+  - q is the number of query vectors
+  - d is the vector dimension
 - Best for small datasets or when exact distances are required
 
 ### Simple LSH Forest
-- O(nq(lk_m + ad + a log(a))) complexity
-- Suitable for single-document retrieval
-- More memory efficient than multi-document approach
+- Requires creating a separate forest for each document
+- O(nlog(n)qd) complexity, where:
+  - n is the number of documents
+  - q is the number of query vectors
+  - d is the vector dimension
 
-### Multi-document LSH Forest
-- O(nq(lk_m + ad + a log(a))) complexity
-- Optimized for multi-document scenarios
-- Slightly faster than simple LSH forest approach
-- Better suited for large-scale document collections
+### Our Depth-Weighted LSH Forest
+
+The implementation below represents a significant improvement over previous approaches: we eliminate the dependence on vector dimensions (d) entirely and reduce the dependence on the number of documents from nlogn to soley logarithmic. 
+
+- O(q log n) complexity, where:
+  - q is the number of query vectors
+  - n is the total number of vectors across all documents
+
 
 ## Implementation Details
 
@@ -78,7 +86,7 @@ The algorithm achieves O(|Q|T log(NP̄)) complexity, where:
 - N is the number of documents
 - P̄ is the average vectors per document
 
-This represents a logarithmic improvement over the naïve O(|Q|NP̄) Chamfer computation.
+This represents a significant improvement over the classic O(|Q|NP̄) Chamfer computation.
 
 ### Key Components
 
@@ -141,7 +149,7 @@ results = forest.query(query_vector, m=5)  # Get 5 nearest neighbors
 
 ### Memory Usage
 - Linear scaling with number of vectors
-- Additional overhead for tree structure
+- Managble overhead for tree structure
 - Optimized for large-scale datasets
 
 ## Future Work
