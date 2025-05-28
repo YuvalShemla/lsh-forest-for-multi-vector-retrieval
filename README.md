@@ -1,5 +1,7 @@
 # Recursive LSH Forest for Chamfer Distance Approximation
 
+(TODO - need to remove files that were left from initial exploration of our project)
+
 This project implements a recursive Locality-Sensitive Hashing (LSH) forest approach to efficiently approximate the chamfer distance for multivector retrieval. The implementation provides a scalable solution for finding similar documents in high-dimensional vector spaces while maintaining accuracy and high recall.
 
 ## Depth-Weighted Chamfer Approximation Algorithm
